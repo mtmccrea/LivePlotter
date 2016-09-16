@@ -434,7 +434,7 @@ LivePlotter : ScopePlotter {
 
 	var <rate = 100;
 
-	var <autoRangeY;
+	var <autoYRange;
 	var <synthLive;
 	var <>currentBufferMinMax;
 
@@ -477,8 +477,8 @@ LivePlotter : ScopePlotter {
 		this.xGrid_(width / rate.neg, 0, \s);
 	}
 
-	autoRangeY_ {arg val;
-		autoRangeY = val.asBoolean;
+	autoYRange_ {arg val;
+		autoYRange = val.asBoolean;
 		this.synthLive.autoMinMax_(val);
 	}
 }

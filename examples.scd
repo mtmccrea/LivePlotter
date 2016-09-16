@@ -33,8 +33,8 @@ p.rate_(50);
 
 p.overlay_(true);
 p.overlay_(false);
-p.autoRangeY_(true);
-p.autoRangeY_(false);
+p.autoYRange_(true);
+p.autoYRange_(false);
 
 y.free;
 p.free;
