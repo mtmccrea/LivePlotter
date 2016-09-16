@@ -29,7 +29,7 @@ g=  Bus.control(s, 3);
 	p.bus_(g);
 b = Buffer.alloc(s, 200)
 b.free
-p.rate_(50);
+p.rate_(50); //this is in pixels per second
 
 p.overlay_(true);
 p.overlay_(false);
