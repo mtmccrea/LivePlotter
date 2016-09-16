@@ -35,6 +35,7 @@ p.overlay_(true);
 p.overlay_(false);
 p.autoYRange_(true);
 p.autoYRange_(false);
+p.yRange_(-1, 1);
 
 y.free;
 p.free;
