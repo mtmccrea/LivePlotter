@@ -11,13 +11,15 @@ StaticText(w).string_("some text");
 (
 s.waitForBoot({
 	f=Bus.control(s, 2);
-	// p = LivePlotter(s, f.index, f.numChannels, 4096);
 	s.sync;
-	// p = LivePlotter(f, 4096, parent: w); //embedded in another view
-	p = LivePlotter(f, 4096, name: "live plotting bus " ++ f.index.asString);
-	
-	// SynthDef(\bufWr, {arg bus; Out.kr(bus, MouseY.kr(-2, 2) ! f.numChannels)}).add;
-	SynthDef(\bufWr, {arg bus; Out.kr(bus, MouseY.kr(-2, 2) ! 1)}).add;
+	p = LivePlotter(f, 4096, parent: w); //embedded in another view
+	// p = LivePlotter(f, 640, name: "live plotting bus " ++ f.index.asString);
+
+	// q = LivePlotter(f)
+
+	SynthDef(\bufWr, {arg bus; Out.kr(bus, MouseY.kr(-2, 2) ! f.numChannels)}).add;
+	// SynthDef(\bufWr, {arg bus; Out.kr(bus, MouseY.kr(-2, 2) ! 1)}).add;
+	// SynthDef(\bufWr, {arg bus; Out.kr(bus, Impulse.kr(3) ! 1)}).add;
 	s.sync;
 	y.free; y = Synth(\bufWr, [\bus, f.index]);
 
@@ -25,17 +27,26 @@ s.waitForBoot({
 	s.plotTree;
 });
 )
+p.synth.updaterSynth.dump
 g=  Bus.control(s, 3);
 	p.bus_(g);
-b = Buffer.alloc(s, 200)
+b = Buffer.alloc(s, 3)
+p.synthLive.phasorBus.get({|val| val.postln})
+p.synth.updaterSynth.get(\bufPhase, {|val| val.postln})
 b.free
-p.rate_(50); //this is in pixels per second
+p.rate
+p.rate_(40); //this is in pixels per second
+p.view.bounds.width
+p.synth.scopeBufSize
+p.synth.scopeBufSize_(p.view.bounds.width)
+y.free;
 
 p.overlay_(true);
 p.overlay_(false);
 p.autoYRange_(true);
 p.autoYRange_(false);
-p.yRange_(-1, 1);
+p.yRange_(-2, 2);
+p.synth.minMaxLagTime
 
 y.free;
 p.free;
@@ -48,14 +59,17 @@ p.free;
 // s.options.sampleRate_(48000)
 (
 s.waitForBoot({
-	b.free; b = Buffer.alloc(s, s.sampleRate * 10, 1);
+	b.free; b = Buffer.alloc(s, s.sampleRate * 1, 1);
+	// b.free; b = Buffer.alloc(s, 4, 1);
 	q = ScopePlotter.new(b);
 
 });
 )
+s.plotTree
 
 //fill the buffer incrementally
-k = fork{5000.do({|inc| b.set(s.sampleRate * 5 + inc, 0.9); 0.001.wait})}
+k = fork{5000.do({|inc| b.set(s.sampleRate * 0.5 + inc, rrand(0.2, 0.8)); 0.001.wait})}
+// b.set(1, 0.9)
 
 //fill the buffer with a sine
 b.sine1([1, 1.5], normalize: true, asWavetable: false, clearFirst: true);

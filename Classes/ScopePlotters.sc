@@ -1,7 +1,7 @@
 ScopePlotter {
 	// copy args;
 	var <buffer, <maxBufSize, <name, <bounds, parent;
-	
+
 	var makeGui, updateColors;
 
 	var <window, <view;
@@ -48,7 +48,7 @@ ScopePlotter {
 		ServerTree.add(this, server);
 		ServerQuit.add(this, server);
 		// this.run; //moved to buffer method
-		
+
 		buffer !? {
 			this.buffer_(buffer)
 		}
@@ -66,7 +66,7 @@ ScopePlotter {
 		"in buffer_ numChannels: ".post; numChannels.postln;
 		this.xGrid_(0, buffer.numFrames);
 		this.updateColors;
-		this.run; 
+		this.run;
 	}
 
 	makeGui { // arg parent;
@@ -138,7 +138,7 @@ ScopePlotter {
 
 		scopeView.onResize_({
 			width = scopeView.bounds.width;
-			synth.scopeBufSize_(width);
+			// synth.scopeBufSize_(width); //for now let's stick to full size
 			onResize !? {onResize.(this)};
 		});
 		view.onClose = { view = nil; this.quit;};
@@ -147,7 +147,7 @@ ScopePlotter {
 
 		scopeView.focus;
 		width = scopeView.bounds.width; //init
-		synth.scopeBufSize_(width); //init
+		// synth.scopeBufSize_(width); //init
 		if( window.notNil ) { window.front };
 	}
 
@@ -157,8 +157,8 @@ ScopePlotter {
 			colors = [Color.black];
 		}, {
 			if(overlay, {
-				// colors = numChannels.collect({Color.rand}); 
-				colors = numChannels.collect({Color.hsv(rrand(0.0, 1.0), 0.6, 0.5)}); 
+				// colors = numChannels.collect({Color.rand});
+				colors = numChannels.collect({Color.hsv(rrand(0.0, 1.0), 0.6, 0.5)});
 			}, {
 				colors = numChannels.collect({Color.black});
 			});
@@ -197,9 +197,10 @@ ScopePlotter {
 		});
 	}
 
-	stop {
+	stop { //this seems unnecessarily convoluted...
 		if( view.notNil ) { {scopeView.stop}.defer };
 		synth.stop;
+		view.remove;
 		onStop !? {onStop.(this)};
 		isRunning = false;
 	}
@@ -239,7 +240,7 @@ ScopePlotter {
 	}
 
 	yRange {[ySpec.asSpec.minval, ySpec.asSpec.maxval]} //not sure if this is useful
-	
+
 	xGrid_ {arg min, max, units; //this sets horizontal grid only, use this.synth for horizontal sygnal adjustments
 		// xSpec = [min, max, units: units].asSpec;
 		xSpec = ControlSpec(min, max, units: units);
@@ -268,7 +269,7 @@ ScopePlotter {
 		drawChannelSeparators = val.asBoolean;
 		gridView !? {{gridView.refresh}.defer};
 	}
-	
+
 	// keyDown { arg char, mod; //subclasses will implement
 	// 	if (mod != 0) { ^false };
 	// 	case (
@@ -302,6 +303,8 @@ ScopePlotterSynth {
 	var updaterArgs, minMax;
 	var <scopeBufSize, <bufPhase, <bufStart, <bufFramesToRead;
 	var synthDefMain, updaterSynthDef;
+	var <group;
+	var <minMaxBuffer;
 
 	*new { arg plotter;
 		var instance;
@@ -328,6 +331,8 @@ ScopePlotterSynth {
 
 		minMax ?? {minMax = plotter.yRange};
 
+		group ?? {group = Group.tail(RootNode(server))};
+
 		if (scopeBuffer.isNil) {
 			scopeBuffer = ScopeBuffer.alloc(server, numChannels);
 			scopeUpdateDefName = "scopeupdate" ++ scopeBuffer.index.asString;
@@ -340,30 +345,54 @@ ScopePlotterSynth {
 		bufStart ?? {bufStart = 0};
 		bufFramesToRead ?? {bufFramesToRead = buffer.numFrames}; //whole buffer by default
 
+		minMaxBuffer ?? {minMaxBuffer = Buffer.alloc(server, bufSizeArg, numChannels)};
 
-		updaterSynthDef = SynthDef(scopeUpdateDefName, { arg scopeBuf = 0, inBuffer = 0, bufSize = 100, minMax = #[-1, 1], bufferPhase = 0/*frames, "rotates" the buffer displayed*/, bufferStart = 0/*frames*/, bufferFramesToRead = 1/*should be specified*/;
+
+		updaterSynthDef = SynthDef(scopeUpdateDefName, { arg scopeBuf = 0, inBuffer = 0, bufSize = 100, minMax = #[-1, 1], bufferPhase = 0/*frames, "rotates" the buffer displayed*/, bufferStart = 0/*frames*/, bufferFramesToRead = 1/*should be specified*/, intermBuffer = 1;
 			var slidingSignal;
 			var phasor, readPhasor;
-			var bufMinMax, switchedMinMax, autoMinMaxTrig, minMaxChanged;
+			var bufMinMax, switchedMinMax, autoMinMaxTrig, minMaxChanged, bufferPhaseLatch, sigMin, sigMax, readTrig, trigCounter, inSignal, lastVal, lastValBuf;
 			// bufSize = bufSize.min(BufFrames.kr(inBuffer));
 			// bufSize.poll;
-			phasor = Phasor.ar(1, 1, 0, bufSize.min(bufSizeArg)); //clip to max buffer size to avoid problems
-			readPhasor = (((phasor * (bufferFramesToRead / bufSize)) + bufferPhase) % BufFrames.kr(inBuffer)) + bufferStart;
+			// phasor = Phasor.ar(1, 1, 0, bufSize.min(bufSizeArg)); //clip to max buffer size to avoid problems
+			// readPhasor = (((phasor * (bufferFramesToRead / bufSize)) + bufferPhase) % BufFrames.kr(inBuffer)) + bufferStart;
+			// phasor = Phasor.ar(1, 1, 0, bufferFramesToRead.min(bufSizeArg)); //clip to max buffer size to avoid problems
+			lastValBuf = LocalBuf(1, 1);
+			phasor = Phasor.ar(1, 1, 0, bufferFramesToRead); //no clip?
+			bufferPhaseLatch = Latch.ar(bufferPhase, Trig.ar(phasor <= 0, 0.01));
+			// readPhasor = ((phasor + bufferPhase) + bufferStart) % BufFrames.kr(inBuffer);
+			readPhasor = ((phasor + bufferPhaseLatch.floor) + bufferStart) % BufFrames.kr(inBuffer); //note .floor for buffer phase
+			//---- minmax tests
+			// inSignal = BufRd.ar(numChannels, inBuffer, readPhasor);
+			// readTrig = Impulse.ar(((SampleRate.ir * (bufferFramesToRead / bufSize)) / 2).clip(SampleRate.ir / 2)); //every other sample frame
+			// sigMin = RunningMin.ar(inSignal, readTrig);
+			// sigMax = RunningMax.ar(inSignal, readTrig);
+			// trigCounter = PulseCount.ar(readTrig, BufRd.ar(1, lastValBuf, DC.ar(0)) >= (BufFrames.kr(intermBuffer) / 2));
+			// // trigCounter.poll(10, \trigCounter);
+			// BufWr.ar(trigCounter, lastValBuf, DC.ar(0)); //memorize last val
+			// BufWr.ar(sigMin, intermBuffer, trigCounter * 2);
+			// BufWr.ar(sigMax, intermBuffer, (trigCounter * 2) + 1);
+			// slidingSignal = BufRd.ar(numChannels, intermBuffer, Phasor.ar(1, 1, 0, bufSize)); //read from minMax buffer here
+			//--- end of minmax tests
 			slidingSignal = BufRd.ar(numChannels, inBuffer, readPhasor);
 			slidingSignal = LinLin.ar(slidingSignal, minMax[0], minMax[1], -1, 1); //minmax scaling here
 			ScopeOut2.ar(slidingSignal, scopeBuf, bufSizeArg, bufSize); //ar
 			// ScopeOut2.kr(slidingSignal, scopeBuf, bufSize, bufSize); //ar
 		});
-		updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart})];  //NOTE .bufnum is needed for scopeBuffer (!!!) but not for regular buffers
-		
+		// updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];  //NOTE .bufnum is needed for scopeBuffer (!!!) but not for regular buffers
+
 		// "plotter.width: ".post; plotter.width.postln;
 		playThread = fork {
 			// synthDefMain.send(server);
 			updaterSynthDef.send(server);
 			server.sync;
 			// synth = Synth.tail(RootNode(server), synthDef.name, synthArgs);
-			// synthMain = Synth.tail(RootNode(server), synthDefMain.name, [\memoryBuf, continuousBuffer, \inBuffer, slidingBuffer, \inbus, bus, \bufSize, plotter.width]); //add rate here! 
-			updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs);
+			// synthMain = Synth.tail(RootNode(server), synthDefMain.name, [\memoryBuf, continuousBuffer, \inBuffer, slidingBuffer, \inbus, bus, \bufSize, plotter.width]); //add rate here!
+			// updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs);
+			// "group.isPlaying: ".post; group.isPlaying.postln;
+			// "group.nodeID: ".post; group.nodeID.postln;
+			// updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs);
+			this.prStartSynth;
 		}
 	}
 
@@ -387,18 +416,31 @@ ScopePlotterSynth {
 	// 	if( synthMain.notNil ) { synthMain.set(\inbus, index) };
 	// }
 
+	prStartSynth {
+		updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];  //NOTE .bufnum is needed for scopeBuffer (!!!) but not for regular buffers
+		updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs);
+	}
+
 	scopeBufSize_ {arg size;
 		scopeBufSize = size;
 		// if( synthMain.notNil ) { synthMain.set(\bufSize, size) };
 		scopeBuffer !? { //don't run before buffer is allocated
-			updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart})];
+			// updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];
+			if( updaterSynth.notNil ) {
+				updaterSynth.free;
+				// updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
+				// updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
+				this.prStartSynth;
+				
+			};
 		};
-		if( updaterSynth.notNil ) {
-			updaterSynth.free;
-			updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
-		};
+		// if( updaterSynth.notNil ) {
+		// 	updaterSynth.free;
+		// 	// updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
+		// 	updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
+		// };
 	}
-	
+
 	bufPhase_ { arg phase; //number or bus
 		bufPhase = phase;
 		if( updaterSynth.notNil ) {	updaterSynth.set(\bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}))};
@@ -411,14 +453,14 @@ ScopePlotterSynth {
 		bufFramesToRead = frames;
 		if( updaterSynth.notNil ) { updaterSynth.set(\bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead})) };
 	}
-	
+
 	free {
 		this.stop;
-		[scopeBuffer].do({|thisOne|
-			if (thisOne.notNil) {
+		[scopeBuffer, minMaxBuffer,ń group].do({|thisOne|
+			// if (thisOne.notNil) {
 				thisOne.free;
-				thisOne = nil;
-			};
+				// thisOne = nil; //this won't work
+			// };
 		});
 		ServerQuit.remove(this, server);
 	}
@@ -450,16 +492,16 @@ LivePlotter : ScopePlotter {
 		synthLive = LivePlotterSynth(this);
 
 		//following functions are called by superclass on appropriate actions
-		onRun = {synthLive.play(bus)}; 
+		onRun = {synthLive.play(bus)};
 		onStop = {synthLive.stop};
 		onFree = {synthLive.free};
 		onResize = {this.updateRateAndXGrid};
-		
+
 		bus !? {
 			this.bus_(bus);
 		}
 	}
-	
+
 	bus_ {arg busArg;
 		bus = busArg;
 		synthLive.initBuffer(bus.server, maxBufSize, bus.numChannels);
@@ -495,7 +537,7 @@ LivePlotterSynth {
 	var resizeReplyName, rangeReplyName;
 	var livePlotter; //reference ScopeLivePlotter for updating values etc
 	var <autoMinMax, <minMax, <synthRefreshUpdateRate, <minMaxLagTime, updaterArgs;
-	var phasorBus;
+	var <phasorBus;
 	var minMaxSynthDef, autoMinMaxSynthDef;
 	var recSynthDef;
 	var <rate = 1;
@@ -544,7 +586,8 @@ LivePlotterSynth {
 		resizeReplyName = ("/" ++ recSynthDefName ++ "_resize").asSymbol;
 		rangeReplyName = ("/" ++ recSynthDefName ++ "_range").asSymbol;
 		// };
-		phasorBus ?? {phasorBus = Bus.control(server, 1)};
+		// phasorBus ?? {phasorBus = Bus.control(server, 1)};
+		phasorBus ?? {phasorBus = Bus.audio(server, 1)};
 
 		//responders
 
@@ -575,7 +618,8 @@ LivePlotterSynth {
 
 			// Out.kr(phaseout, memPhasor);
 			// Out.kr(phaseout, A2K.kr(memPhasor));
-			Out.kr(phaseout, A2K.kr(memPhasor) + phasorOutOffset);
+			// Out.kr(phaseout, A2K.kr(memPhasor) + phasorOutOffset);
+			Out.ar(phaseout, memPhasor + phasorOutOffset);
 		});
 
 		autoMinMaxSynthDef = SynthDef(autoMinMaxDefName, { arg buf = 0, minMaxLagTime = 0.2, updateRate = 20, restartRefreshingTime = 1, minMinMaxDifference = 0.1;
@@ -595,17 +639,20 @@ LivePlotterSynth {
 			// minMaxChanged.poll;
 			SendReply.kr(autoMinMaxTrig * minMaxChanged, rangeReplyName, switchedMinMax);
 		});
-		updaterArgs = [\buf, buffer, \inbus, bus, \phaseout, phasorBus, \rate, rate]; 
+		updaterArgs = [\buf, buffer, \inbus, bus, \phaseout, phasorBus, \rate, rate];
 		// "livePlotter.width: ".post; livePlotter.width.postln;
+		
 		playThread = fork {
 			recSynthDef.send(server);
 			autoMinMaxSynthDef.send(server);
 			server.sync;
-			updaterSynth = Synth.tail(RootNode(server), recSynthDef.name, updaterArgs);
-			minMaxSynth = Synth.tail(RootNode(server), autoMinMaxSynthDef.name, [\buf, buffer, \updateRate, synthRefreshUpdateRate, \minMaxLagTime, minMaxLagTime]); 
+			//important, set the phase advancing
+			livePlotter.synth.bufPhase_(phasorBus);
+			// updaterSynth = Synth.tail(RootNode(server), recSynthDef.name, updaterArgs);
+			// minMaxSynth = Synth.tail(RootNode(server), autoMinMaxSynthDef.name, [\buf, buffer, \updateRate, synthRefreshUpdateRate, \minMaxLagTime, minMaxLagTime]);
+			updaterSynth = Synth.head(livePlotter.synth.group, recSynthDef.name, updaterArgs);
+			minMaxSynth = Synth.tail(livePlotter.synth.group, autoMinMaxSynthDef.name, [\buf, buffer, \updateRate, synthRefreshUpdateRate, \minMaxLagTime, minMaxLagTime]);
 		};
-		//important, set the phase advancing
-		livePlotter.synth.bufPhase_(phasorBus);
 	}
 
 	stop {
@@ -643,7 +690,7 @@ LivePlotterSynth {
 		rate = rateArg;
 		if( updaterSynth.notNil ) { updaterSynth.set(\rate, rateArg) };
 	}
-	
+
 	free {
 		this.stop;
 		[buffer, rangeResp].do({|thisOne|
