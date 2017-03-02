@@ -33,7 +33,6 @@ ScopePlotter {
 
 	init {
 		synth = ScopePlotterSynth(this);
-
 		maxBufSize = max(maxBufSize, 128);
 		// Color.hsv(0.6, 1, 0.5).test
 		channelSeparatorsColor ?? {channelSeparatorsColor = Color.hsv(0.6, 1, 0.7)}; //blue-ish
@@ -45,13 +44,16 @@ ScopePlotter {
 		this.makeGui;
 		// this.updateColors;//moved to buffer method
 
-		ServerTree.add(this, server);
-		ServerQuit.add(this, server);
+		// ServerTree.add(this);
+		// ServerQuit.add(this);
 		// this.run; //moved to buffer method
 
 		buffer !? {
+			server = buffer.server;
 			this.buffer_(buffer)
-		}
+		};
+
+		"server: ".post; server.postln;
 	}
 
 	buffer_ {arg bufferArg;
@@ -139,6 +141,7 @@ ScopePlotter {
 		scopeView.onResize_({
 			width = scopeView.bounds.width;
 			// synth.scopeBufSize_(width); //for now let's stick to full size
+			// scopeView.bufnum = synth.scopeBufferIndex; //update the bufnum
 			onResize !? {onResize.(this)};
 		});
 		view.onClose = { view = nil; this.quit;};
@@ -175,6 +178,7 @@ ScopePlotter {
 	waveColors {^scopeView.waveColors}
 
 	doOnServerTree {
+		// synth = ScopePlotterSynth(this); //hack?
 		this.run;
 	}
 
@@ -186,6 +190,8 @@ ScopePlotter {
 		if(isRunning, {
 			this.stop;
 		}); //stop first
+		ServerTree.add(this, server);
+		ServerQuit.add(this, server);
 		if(buffer.notNil, {
 			synth.play(maxBufSize, buffer);
 			if( view.notNil && synth.scopeBufferIndex.notNil) {
@@ -200,7 +206,9 @@ ScopePlotter {
 	stop { //this seems unnecessarily convoluted...
 		if( view.notNil ) { {scopeView.stop}.defer };
 		synth.stop;
-		view.remove;
+		// view.remove;
+		ServerTree.remove(this, server);
+		ServerQuit.remove(this, server);
 		onStop !? {onStop.(this)};
 		isRunning = false;
 	}
@@ -220,9 +228,10 @@ ScopePlotter {
 			} //not sure why this gives an error
 		}.defer; };
 		// "after window closing".postln;
-		ServerTree.remove(this, server);
-		ServerQuit.remove(this, server);
-		// "end of this.quit".postln;
+		"server: ".post; server.postln;
+		// ServerTree.remove(this);
+		// ServerQuit.remove(this);
+		"end of this.quit".postln;
 	}
 
 	free {
@@ -341,6 +350,8 @@ ScopePlotterSynth {
 		bufIndex = scopeBuffer.bufnum.asInteger;
 
 		scopeBufSize ?? {scopeBufSize = bufSizeArg};
+		// this.makeScopeBuffer; //scope buffer stuff
+
 		bufPhase ?? {bufPhase = 0};
 		bufStart ?? {bufStart = 0};
 		bufFramesToRead ?? {bufFramesToRead = buffer.numFrames}; //whole buffer by default
@@ -379,7 +390,7 @@ ScopePlotterSynth {
 			ScopeOut2.ar(slidingSignal, scopeBuf, bufSizeArg, bufSize); //ar
 			// ScopeOut2.kr(slidingSignal, scopeBuf, bufSize, bufSize); //ar
 		});
-		// updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];  //NOTE .bufnum is needed for scopeBuffer (!!!) but not for regular buffers
+		// updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, synthdefSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];  //NOTE .bufnum is needed for scopeBuffer (!!!) but not for regular buffers
 
 		// "plotter.width: ".post; plotter.width.postln;
 		playThread = fork {
@@ -421,6 +432,10 @@ ScopePlotterSynth {
 		updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs);
 	}
 
+/*	buffer_ {arg bufArg;
+		buffer = bufArg;
+	}*/
+
 	scopeBufSize_ {arg size;
 		scopeBufSize = size;
 		// if( synthMain.notNil ) { synthMain.set(\bufSize, size) };
@@ -428,10 +443,12 @@ ScopePlotterSynth {
 			// updaterArgs = [\scopeBuf, scopeBuffer.bufnum, \inBuffer, buffer, \bufSize, scopeBufSize, \minMax, minMax, \bufferFramesToRead, bufFramesToRead.isKindOf(Bus).if({bufFramesToRead.asMap}, {bufFramesToRead}), \bufferPhase, bufPhase.isKindOf(Bus).if({bufPhase.asMap}, {bufPhase}), \bufferStart, bufStart.isKindOf(Bus).if({bufStart.asMap}, {bufStart}), \intermBuffer, minMaxBuffer];
 			if( updaterSynth.notNil ) {
 				updaterSynth.free;
+				// this.makeScopeBuffer;
 				// updaterSynth = Synth.tail(RootNode(server), updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
 				// updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
 				this.prStartSynth;
-				
+				// this.stop;
+				// this.play;
 			};
 		};
 		// if( updaterSynth.notNil ) {
@@ -440,6 +457,17 @@ ScopePlotterSynth {
 		// 	updaterSynth = Synth.tail(group, updaterSynthDef.name, updaterArgs); //restarting synth here to make sure the phase of the updater is correct
 		// };
 	}
+
+/*	makeScopeBuffer {
+		if (scopeBuffer.notNil, {scopeBuffer.free});
+		// if (scopeBuffer.isNil) {
+		scopeBuffer = ScopeBuffer.alloc(server, numChannels);
+		scopeUpdateDefName = "scopeupdate" ++ scopeBuffer.index.asString;
+
+		bufIndex = scopeBuffer.bufnum.asInteger;
+
+		scopeBufSize ?? {scopeBufSize = bufSizeArg};
+	}*/
 
 	bufPhase_ { arg phase; //number or bus
 		bufPhase = phase;
@@ -456,7 +484,7 @@ ScopePlotterSynth {
 
 	free {
 		this.stop;
-		[scopeBuffer, minMaxBuffer,ń group].do({|thisOne|
+		[scopeBuffer, minMaxBuffer, group].do({|thisOne|
 			// if (thisOne.notNil) {
 				thisOne.free;
 				// thisOne = nil; //this won't work
@@ -488,6 +516,8 @@ LivePlotter : ScopePlotter {
 		bus = busArg;
 		"bus: ".post; bus.postln;
 		"buffer: ".post; buffer.postln;
+
+		server = bus.server;
 
 		synthLive = LivePlotterSynth(this);
 
@@ -609,12 +639,17 @@ LivePlotterSynth {
 			var bufSize;
 			// var memPhasor1;
 
-			inSig = In.kr(inbus, numChannels); //figure how to pass an array here maybe
+			if(bus.rate == \audio, {
+				inSig = In.ar(inbus, numChannels); //figure how to pass an array here maybe
+			}, {
+				inSig = K2A.ar(In.kr(inbus, numChannels)); //figure how to pass an array here maybe
+			});
 			bufSize = BufFrames.kr(buf);
 			// memPhasor1 = Phasor.kr(1, rate * ControlDur.ir, 0, bufSize); //rate scaled so it's samples/second
 			memPhasor = Phasor.ar(1, rate * SampleDur.ir, 0, bufSize); //ar to address issue of skipping samples; rate scaled so it's samples/second
 			// BufWr.kr(inSig, buf, memPhasor); //storing signal of the last number of samples
-			BufWr.ar(K2A.ar(inSig), buf, memPhasor); //storing signal of the last number of samples
+			// BufWr.ar(K2A.ar(inSig), buf, memPhasor); //storing signal of the last number of samples
+			BufWr.ar(inSig, buf, memPhasor); //storing signal of the last number of samples; K2A moved up
 
 			// Out.kr(phaseout, memPhasor);
 			// Out.kr(phaseout, A2K.kr(memPhasor));
@@ -641,7 +676,7 @@ LivePlotterSynth {
 		});
 		updaterArgs = [\buf, buffer, \inbus, bus, \phaseout, phasorBus, \rate, rate];
 		// "livePlotter.width: ".post; livePlotter.width.postln;
-		
+
 		playThread = fork {
 			recSynthDef.send(server);
 			autoMinMaxSynthDef.send(server);
@@ -716,7 +751,7 @@ LivePlotterSynth {
 + Buffer {
 	plot0 { |name, bounds, minval, maxval, separately = false| //temporary basic plotter
 		var plotter;
-		plotter = ScopePlotter(this.server, this, 4096, name, bounds);
+		plotter = ScopePlotter(this, 4096, name, bounds);
 		if((minval.notNil && maxval.notNil), {plotter.setRangeY_(minval, maxval)});
 		^plotter;
 	}
