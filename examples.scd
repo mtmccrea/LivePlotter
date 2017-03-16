@@ -51,6 +51,8 @@ p.synth.minMaxLagTime
 y.free;
 p.free;
 
+FreqScope
+Scope2
 
 
 //parent class - basic static plotter
