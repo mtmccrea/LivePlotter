@@ -87,10 +87,10 @@ ScopePlotter {
 
 		// WIDGETS
 
-		scopeView = ScopeView();
+		scopeView = ScopeView(view);
 		scopeView.canFocus = true;
 
-		gridView = UserView.new;
+		gridView = UserView.new(view);
 		gridView.background = Color.clear;
 		gridView.drawFunc = {|thisView|
 			var xGridBounds, yGridBounds;
@@ -227,6 +227,7 @@ ScopePlotter {
 				win.close
 			} //not sure why this gives an error
 		}.defer; };
+		view !? {{view.close}.defer};
 		// "after window closing".postln;
 		"server: ".post; server.postln;
 		// ServerTree.remove(this);
