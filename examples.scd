@@ -90,3 +90,10 @@ fork{
 y.free; //stop recording
 b.free; q.quit;//free
 
+//plotting bus directly
+
+// ScopeViewKr
+
+Pen
+
+SoundFileView
