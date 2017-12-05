@@ -1,0 +1,8 @@
+(
+	\name:	"LivePlotter",
+	\path:	"LivePlotter",
+	\summary:	"Plotting classes for control signals",
+	\author:	"Marcin Pączkowski",
+	\version:	"1.0.0",
+	\url:	"https://github.com/dyfer/LivePlotter",
+)
