@@ -114,7 +114,7 @@ ScopePlotter {
 						});
 					});
 				});
-				if(overlay.not && (numChannels > 1) && drawChannelSeparators, { //draw lines between channels
+				if(overlay.not and: { (numChannels > 1) and: { drawChannelSeparators } }, { //draw lines between channels
 					var singleChannelHeight, thisWidth;
 					singleChannelHeight = thisView.bounds.height/numChannels;
 					thisWidth = thisView.bounds.width;
