@@ -1,4 +1,4 @@
-ScopePlotter {
+ScopePlotter2 { //this one uses control buses and min/max
 	// copy args;
 	var <buffer, <maxBufSize, <name, <bounds, parent;
 
@@ -15,7 +15,7 @@ ScopePlotter {
 	var <xSpec, <ySpec, <xGrid, <yGrid;
 	var <drawXGrid = true, <drawYGrid = true;
 
-	var <drawChannelSeparators = true, <channelSeparatorsColor, <channelSeparatorsWidth = 1;
+	var <drawChannelSeparators = true, <>channelSeparatorsColor;
 
 	var <>onResize, <>onFree, <>onRun, <>onStop;
 
@@ -32,7 +32,7 @@ ScopePlotter {
 	}
 
 	init {
-		synth = ScopePlotterSynth(this);
+		synth = ScopePlotterSynth2(this);
 		maxBufSize = max(maxBufSize, 128);
 		// Color.hsv(0.6, 1, 0.5).test
 		channelSeparatorsColor ?? {channelSeparatorsColor = Color.hsv(0.6, 1, 0.7)}; //blue-ish
@@ -114,17 +114,16 @@ ScopePlotter {
 						});
 					});
 				});
-				if(overlay.not and: { (numChannels > 1) and: { drawChannelSeparators } }, { //draw lines between channels
+				if(overlay.not && (numChannels > 1) && drawChannelSeparators, { //draw lines between channels
 					var singleChannelHeight, thisWidth;
 					singleChannelHeight = thisView.bounds.height/numChannels;
 					thisWidth = thisView.bounds.width;
 					(numChannels - 1).do({|inc|
 						var thisY;
 						thisY = (inc+1) * singleChannelHeight;
-						Pen.strokeColor = channelSeparatorsColor;
-						Pen.width = channelSeparatorsWidth;
+						Pen.fillColor = channelSeparatorsColor;
 						Pen.line(0@thisY, thisWidth@thisY);
-						Pen.stroke;
+						Pen.stroke(1);
 					})
 				})
 			})
@@ -272,23 +271,13 @@ ScopePlotter {
 	overlay_ {arg val;
 		overlay = val.asBoolean;
 		scopeView.style = overlay.asInteger;
-		// this.updateColors;
+		this.updateColors;
 		gridView !? {{gridView.refresh}.defer};
 	}
 
 	drawChannelSeparators_ {arg val;
 		drawChannelSeparators = val.asBoolean;
 		gridView !? {{gridView.refresh}.defer};
-	}
-
-	channelSeparatorsColor_ {arg color;
-		channelSeparatorsColor = color;
-		gridView.refresh;
-	}
-
-	channelSeparatorsWidth_ {arg px;
-		channelSeparatorsWidth = px;
-		gridView.refresh;
 	}
 
 	// keyDown { arg char, mod; //subclasses will implement
@@ -314,7 +303,7 @@ ScopePlotter {
 	// }
 }
 
-ScopePlotterSynth {
+ScopePlotterSynth2 {
 	// Encapsulate management of server resources
 	var plotter; //copyargs; reference ScopePlotter for updating values etc
 	var <server, <buffer, <synthDefName, <updaterSynth;
@@ -511,7 +500,7 @@ ScopePlotterSynth {
 	}
 }
 
-LivePlotter : ScopePlotter {
+LivePlotter2 : ScopePlotter2 {
 	var <bus;
 
 	var <rate = 100;
@@ -531,7 +520,7 @@ LivePlotter : ScopePlotter {
 
 		server = bus.server;
 
-		synthLive = LivePlotterSynth(this);
+		synthLive = LivePlotter2Synth(this);
 
 		//following functions are called by superclass on appropriate actions
 		onRun = {synthLive.play(bus)};
@@ -565,17 +554,10 @@ LivePlotter : ScopePlotter {
 		autoYRange = val.asBoolean;
 		this.synthLive.autoMinMax_(val);
 	}
-
-	// pad the Y range
-	// e.g. norm of 0.1 would pad the displayed range 10%:
-	// 5% above and below the max and min, respectively
-	autoYRangePad_ {arg norm = 0.05;
-		this.synthLive.autoMinMaxPad_(norm);
-	}
 }
 
 
-LivePlotterSynth {
+LivePlotter2Synth {
 	// Encapsulate management of server resources
 
 	var <server, <buffer, <updaterSynth, <minMaxSynth;
@@ -676,7 +658,7 @@ LivePlotterSynth {
 			Out.ar(phaseout, memPhasor + phasorOutOffset);
 		});
 
-		autoMinMaxSynthDef = SynthDef(autoMinMaxDefName, { arg buf = 0, minMaxLagTime = 0.2, updateRate = 20, restartRefreshingTime = 1, minMinMaxDifference = 0.1, autoRangePad = 0.05, t_forceUpdate = 0;
+		autoMinMaxSynthDef = SynthDef(autoMinMaxDefName, { arg buf = 0, minMaxLagTime = 0.2, updateRate = 20, restartRefreshingTime = 1, minMinMaxDifference = 0.1;
 			var slidingSignal;
 			var bufMinMax, switchedMinMax, autoMinMaxTrig, minMaxChanged;
 
@@ -691,10 +673,7 @@ LivePlotterSynth {
 			switchedMinMax = Lag.kr(switchedMinMax, minMaxLagTime);
 			minMaxChanged = EnvGen.kr(Env([0, 1, 0], [0, restartRefreshingTime]), Changed.kr(switchedMinMax).sum).roundUp;
 			// minMaxChanged.poll;
-			SendReply.kr(autoMinMaxTrig * minMaxChanged + t_forceUpdate,
-				rangeReplyName,
-				switchedMinMax + (switchedMinMax[1] - switchedMinMax[0] * autoRangePad * 0.5 * [-1, 1])
-			);
+			SendReply.kr(autoMinMaxTrig * minMaxChanged, rangeReplyName, switchedMinMax);
 		});
 		updaterArgs = [\buf, buffer, \inbus, bus, \phaseout, phasorBus, \rate, rate];
 		// "livePlotter.width: ".post; livePlotter.width.postln;
@@ -720,15 +699,6 @@ LivePlotterSynth {
 
 	autoMinMax_ {arg val;
 		autoMinMax = val.asBoolean;
-		minMaxSynth.set(\t_forceUpdate, 1);
-	}
-
-	// pad the range of the min and max values by norm
-	// e.g. a norm of 0.1 would pad the displayed range 10%:
-	// 5% above and below the max and min, respectively
-	autoMinMaxPad_{arg norm;
-		minMaxSynth.set(\autoRangePad, norm);
-		minMaxSynth.set(\t_forceUpdate, 1);
 	}
 
 
