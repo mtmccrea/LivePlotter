@@ -564,6 +564,13 @@ LivePlotter : ScopePlotter {
 		autoYRange = val.asBoolean;
 		this.synthLive.autoMinMax_(val);
 	}
+
+	// pad the Y range
+	// e.g. norm of 0.1 would pad the displayed range 10%:
+	// 5% above and below the max and min, respectively
+	autoYRangePad_ {arg norm = 0.05;
+		this.synthLive.autoMinMaxPad_(norm);
+	}
 }
 
 
@@ -668,7 +675,7 @@ LivePlotterSynth {
 			Out.ar(phaseout, memPhasor + phasorOutOffset);
 		});
 
-		autoMinMaxSynthDef = SynthDef(autoMinMaxDefName, { arg buf = 0, minMaxLagTime = 0.2, updateRate = 20, restartRefreshingTime = 1, minMinMaxDifference = 0.1;
+		autoMinMaxSynthDef = SynthDef(autoMinMaxDefName, { arg buf = 0, minMaxLagTime = 0.2, updateRate = 20, restartRefreshingTime = 1, minMinMaxDifference = 0.1, autoRangePad = 0.05, t_forceUpdate = 0;
 			var slidingSignal;
 			var bufMinMax, switchedMinMax, autoMinMaxTrig, minMaxChanged;
 
@@ -683,7 +690,10 @@ LivePlotterSynth {
 			switchedMinMax = Lag.kr(switchedMinMax, minMaxLagTime);
 			minMaxChanged = EnvGen.kr(Env([0, 1, 0], [0, restartRefreshingTime]), Changed.kr(switchedMinMax).sum).roundUp;
 			// minMaxChanged.poll;
-			SendReply.kr(autoMinMaxTrig * minMaxChanged, rangeReplyName, switchedMinMax);
+			SendReply.kr(autoMinMaxTrig * minMaxChanged + t_forceUpdate,
+				rangeReplyName,
+				switchedMinMax + (switchedMinMax[1] - switchedMinMax[0] * autoRangePad * 0.5 * [-1, 1])
+			);
 		});
 		updaterArgs = [\buf, buffer, \inbus, bus, \phaseout, phasorBus, \rate, rate];
 		// "livePlotter.width: ".post; livePlotter.width.postln;
@@ -709,6 +719,15 @@ LivePlotterSynth {
 
 	autoMinMax_ {arg val;
 		autoMinMax = val.asBoolean;
+		minMaxSynth.set(\t_forceUpdate, 1);
+	}
+
+	// pad the range of the min and max values by norm
+	// e.g. a norm of 0.1 would pad the displayed range 10%:
+	// 5% above and below the max and min, respectively
+	autoMinMaxPad_{arg norm;
+		minMaxSynth.set(\autoRangePad, norm);
+		minMaxSynth.set(\t_forceUpdate, 1);
 	}
 
 
