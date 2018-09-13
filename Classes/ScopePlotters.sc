@@ -15,7 +15,7 @@ ScopePlotter {
 	var <xSpec, <ySpec, <xGrid, <yGrid;
 	var <drawXGrid = true, <drawYGrid = true;
 
-	var <drawChannelSeparators = true, <>channelSeparatorsColor;
+	var <drawChannelSeparators = true, <channelSeparatorsColor, <channelSeparatorsWidth = 1;
 
 	var <>onResize, <>onFree, <>onRun, <>onStop;
 
@@ -121,9 +121,10 @@ ScopePlotter {
 					(numChannels - 1).do({|inc|
 						var thisY;
 						thisY = (inc+1) * singleChannelHeight;
-						Pen.fillColor = channelSeparatorsColor;
+						Pen.strokeColor = channelSeparatorsColor;
+						Pen.width = channelSeparatorsWidth;
 						Pen.line(0@thisY, thisWidth@thisY);
-						Pen.stroke(1);
+						Pen.stroke;
 					})
 				})
 			})
@@ -277,6 +278,16 @@ ScopePlotter {
 	drawChannelSeparators_ {arg val;
 		drawChannelSeparators = val.asBoolean;
 		gridView !? {{gridView.refresh}.defer};
+	}
+
+	channelSeparatorsColor_ {arg color;
+		channelSeparatorsColor = color;
+		gridView.refresh;
+	}
+
+	channelSeparatorsWidth_ {arg px;
+		channelSeparatorsWidth = px;
+		gridView.refresh;
 	}
 
 	// keyDown { arg char, mod; //subclasses will implement
