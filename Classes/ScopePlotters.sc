@@ -271,7 +271,7 @@ ScopePlotter {
 	overlay_ {arg val;
 		overlay = val.asBoolean;
 		scopeView.style = overlay.asInteger;
-		this.updateColors;
+		// this.updateColors;
 		gridView !? {{gridView.refresh}.defer};
 	}
 
