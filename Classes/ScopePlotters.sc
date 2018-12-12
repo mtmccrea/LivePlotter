@@ -53,7 +53,7 @@ ScopePlotter {
 			this.buffer_(buffer)
 		};
 
-		"server: ".post; server.postln;
+		// "server: ".post; server.postln;
 	}
 
 	buffer_ {arg bufferArg;
@@ -65,7 +65,7 @@ ScopePlotter {
 		scopeView.server = server;
 		scopeView.start;
 		numChannels = buffer.numChannels;
-		"in buffer_ numChannels: ".post; numChannels.postln;
+		// "in buffer_ numChannels: ".post; numChannels.postln;
 		this.xGrid_(0, buffer.numFrames);
 		this.updateColors;
 		this.run;
@@ -526,8 +526,8 @@ LivePlotter : ScopePlotter {
 
 	initLP {arg busArg;
 		bus = busArg;
-		"bus: ".post; bus.postln;
-		"buffer: ".post; buffer.postln;
+		// "bus: ".post; bus.postln;
+		// "buffer: ".post; buffer.postln;
 
 		server = bus.server;
 
@@ -622,7 +622,7 @@ LivePlotterSynth {
 
 		bufSizeArg = buffer.numFrames;
 
-		"numChannels: ".post; numChannels.postln;
+		// "numChannels: ".post; numChannels.postln;
 
 		if(server.serverRunning.not) { ^this };
 
