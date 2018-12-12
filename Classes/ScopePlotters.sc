@@ -683,14 +683,16 @@ LivePlotterSynth {
 			//for auto min max
 			autoMinMaxTrig = Impulse.kr(updateRate);
 			bufMinMax = [BufMin.kr(buf, autoMinMaxTrig)[0], BufMax.kr(buf, autoMinMaxTrig)[0]];
-			// bufMinMax.poll;
+			// bufMinMax.poll(label: \bufMinMax);
 			// switchedMinMax = Select.kr(autoMinMax, [minMax, bufMinMax]);
 			switchedMinMax = bufMinMax;
 
 			switchedMinMax[1] = switchedMinMax[1].max(switchedMinMax[0] + minMinMaxDifference);
 			switchedMinMax = Lag.kr(switchedMinMax, minMaxLagTime);
-			minMaxChanged = EnvGen.kr(Env([0, 1, 0], [0, restartRefreshingTime]), Changed.kr(switchedMinMax).sum).roundUp;
-			// minMaxChanged.poll;
+			// switchedMinMax.poll(label: \switchedMinMax);
+			// minMaxChanged = EnvGen.kr(Env([0, 1, 0], [0, restartRefreshingTime]), Changed.kr(switchedMinMax).poll(label:\switchedMinMaxChanged).sum).roundUp;
+			minMaxChanged = Changed.kr(switchedMinMax).sum > 0;
+			// minMaxChanged.poll(label: \minmaxchanged);
 			SendReply.kr(autoMinMaxTrig * minMaxChanged + t_forceUpdate,
 				rangeReplyName,
 				switchedMinMax + (switchedMinMax[1] - switchedMinMax[0] * autoRangePad * 0.5 * [-1, 1])
