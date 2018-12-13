@@ -1,6 +1,4 @@
 
-Bus.control.asUGenInput
-s.boot;
 (
 ~plot = {|inbus = 0, parent, plotSize = 5, updateRate = 20| //only single channel for now
 	var arr, phase = 0, updateRateReci, width, height, view, window, busIndex, numChannels, updateRoutine, refreshRoutine, pointTimeReciprocal, updateVals;
